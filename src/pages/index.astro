@@ -18,6 +18,11 @@ const errorRoomId = Astro.url.searchParams.get("roomId");
 const errorRoomName = errorRoomId
   ? rooms.find((room) => room.id === Number(errorRoomId))?.name
   : undefined;
+const STATUS_TEXT: Record<string, string> = {
+  booked: "Booked.",
+  cancelled: "Booking cancelled.",
+};
+const statusCode = Astro.url.searchParams.get("status");
 
 // On a rejected submission, refill the form from what was actually sent —
 // see api/bookings.ts's withInput — rather than making someone retype every
@@ -34,6 +39,12 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Crit Rooms</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <nav aria-label="site">
@@ -56,7 +67,16 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
           </p>
         )
       }
+      {
+        statusCode && (
+          <p role="status" class="success">
+            {STATUS_TEXT[statusCode] ?? "Done."}
+          </p>
+        )
+      }
 
+      <div class="card">
+      <p class="hint">All times are Australia/Canberra local time.</p>
       <form method="post" action="/api/bookings">
         <div class="field">
           <label for="roomId">Room</label>
@@ -69,6 +89,7 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
               ))
             }
           </select>
+          <p id="room-availability" class="hint" aria-live="polite"></p>
         </div>
         <div class="field">
           <label for="pod">Pod</label>
@@ -107,11 +128,12 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
         </div>
         <button>Book the room</button>
       </form>
+      </div>
 
       <h2>Schedule</h2>
       {
         bookings.length === 0 ? (
-          <p>No bookings yet.</p>
+          <p class="empty">No bookings yet.</p>
         ) : (
           <div class="table-scroll" tabindex="0" role="region" aria-label="Schedule">
             <table>
@@ -122,6 +144,7 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
                   <th scope="col">Tutor</th>
                   <th scope="col">Starts</th>
                   <th scope="col">Ends</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody id="schedule">
@@ -133,7 +156,7 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
                 {bookings.map((booking) => {
                   const isPast = booking.endsAt < nowLocal();
                   return (
-                    <tr class={isPast ? "past" : undefined}>
+                    <tr class={[`room-${booking.roomId}`, isPast && "past"].filter(Boolean).join(" ")}>
                       <td>{booking.roomName}</td>
                       <td>{booking.pod}</td>
                       <td>{booking.tutor ?? "—"}</td>
@@ -141,6 +164,15 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
                       <td>
                         {booking.endsAt.replace("T", " ")}
                         {isPast && " (past)"}
+                      </td>
+                      <td>
+                        {!isPast && (
+                          <form method="post" action={`/api/bookings/${booking.id}`} class="cancel-form">
+                            <button type="submit" class="btn-cancel">
+                              Cancel
+                            </button>
+                          </form>
+                        )}
                       </td>
                     </tr>
                   );
@@ -150,12 +182,29 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
           </div>
         )
       }
+      <script
+        is:inline
+        type="application/json"
+        id="bookings-data"
+        set:html={JSON.stringify(
+          bookings.map((b) => ({
+            id: b.id,
+            roomId: b.roomId,
+            startsAt: b.startsAt,
+            endsAt: b.endsAt,
+          })),
+        )}
+      />
 
       <h2 id="live-heading">Just booked</h2>
       <p>New bookings from other tabs appear here as they happen.</p>
       <ul id="live" aria-labelledby="live-heading" aria-live="polite"></ul>
     </main>
     <script>
+      // @ts-nocheck — plain inline script, not a module; JSDoc annotations
+      // below aren't enough for astro check to thread types through
+      // Array#filter/sort/map chains, so this file opts out like any other
+      // vanilla client script would.
       // The live half of the app: subscribe to the SSE stream and note new
       // bookings from other tabs as they happen. The form itself needs none
       // of this — its POST + redirect re-renders the submitting tab's own
@@ -163,11 +212,58 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
       // without re-sorting the schedule table client-side.
       const live = document.querySelector("#live");
       const source = new EventSource("/api/events");
+
+      // Availability preview: computed entirely from data the page already
+      // rendered (no new endpoint) — the embedded JSON blob below, kept live
+      // by folding in whatever the SSE stream broadcasts, the same source
+      // every other open tab's schedule table already relies on.
+      const dataEl = document.querySelector("#bookings-data");
+      /** @type {{id: number, roomId: number, startsAt: string, endsAt: string}[]} */
+      const bookingsData = dataEl ? JSON.parse(dataEl.textContent ?? "[]") : [];
+      const roomSelect = /** @type {HTMLSelectElement | null} */ (document.querySelector("#roomId"));
+      const availabilityEl = document.querySelector("#room-availability");
+
+      function renderAvailability() {
+        if (!roomSelect || !availabilityEl) return;
+        const roomId = Number(roomSelect.value);
+        const forRoom = bookingsData
+          .filter((b) => b.roomId === roomId)
+          .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+        if (forRoom.length === 0) {
+          availabilityEl.textContent = "No existing bookings for this room.";
+          return;
+        }
+        const ranges = forRoom
+          .map((b) => `${b.startsAt.replace("T", " ")}–${b.endsAt.replace("T", " ")}`)
+          .join(", ");
+        availabilityEl.textContent = `Already booked: ${ranges}`;
+      }
+
+      roomSelect?.addEventListener("change", renderAvailability);
+      renderAvailability();
+
       source.addEventListener("message", (event) => {
         const booking = JSON.parse(event.data);
         const item = document.createElement("li");
         item.textContent = `${booking.roomName}: ${booking.pod}, ${booking.startsAt.replace("T", " ")}–${booking.endsAt.replace("T", " ")}`;
         live?.prepend(item);
+
+        bookingsData.push({
+          id: booking.id,
+          roomId: booking.roomId,
+          startsAt: booking.startsAt,
+          endsAt: booking.endsAt,
+        });
+        renderAvailability();
+      });
+
+      // Cancel forms submit as plain POSTs (progressive enhancement, same as
+      // the booking form) — this only adds a confirm guard against a mis-click,
+      // never blocks submission when JS is unavailable.
+      document.querySelectorAll(".cancel-form").forEach((form) => {
+        form.addEventListener("submit", (event) => {
+          if (!confirm("Cancel this booking?")) event.preventDefault();
+        });
       });
     </script>
   </body>

@@ -48,7 +48,7 @@ describe("bookings", () => {
       }),
     );
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/");
+    expect(res.headers.get("location")).toBe("/?status=booked");
   });
 
   it("persists the booking: a fresh page load includes it", async () => {
@@ -126,14 +126,14 @@ describe("bookings", () => {
       booking({ pod: first, roomId: "4", startsAt: "2031-05-01T09:00", endsAt: "2031-05-01T10:00" }),
     );
     expect(firstRes.status).toBe(303);
-    expect(firstRes.headers.get("location")).toBe("/");
+    expect(firstRes.headers.get("location")).toBe("/?status=booked");
 
     const secondRes = await post(
       "/api/bookings",
       booking({ pod: second, roomId: "4", startsAt: "2031-05-01T10:00", endsAt: "2031-05-01T11:00" }),
     );
     expect(secondRes.status).toBe(303);
-    expect(secondRes.headers.get("location")).toBe("/");
+    expect(secondRes.headers.get("location")).toBe("/?status=booked");
 
     const body = await (await fetch(baseUrl)).text();
     expect(body).toContain(first);
@@ -259,5 +259,75 @@ describe("bookings", () => {
 
     const stillUp = await fetch(baseUrl);
     expect(stillUp.status).toBe(200);
+  });
+});
+
+// Cancelling has the same no-accounts trust model as booking itself: anyone
+// can cancel any booking (see cancelBooking's comment in src/lib/db.ts). Its
+// route takes an id from the URL path, not a form body, so it needs its own
+// coverage separate from the createBooking-reason checklist above.
+describe("cancelling", () => {
+  // The rendered page doesn't print a booking's id anywhere visible, but the
+  // cancel form's own action attribute carries it — extract it from the
+  // table row containing a known unique pod string.
+  const findCancelId = (html: string, pod: string): string => {
+    const rowMatch = new RegExp(`<tr[^>]*>(?:(?!</tr>).)*${pod}(?:(?!</tr>).)*</tr>`, "s").exec(
+      html,
+    );
+    if (!rowMatch) throw new Error(`no row found for pod ${pod}`);
+    const actionMatch = /action="\/api\/bookings\/(\d+)"/.exec(rowMatch[0]);
+    if (!actionMatch) throw new Error(`no cancel form found for pod ${pod}`);
+    return actionMatch[1];
+  };
+
+  it("cancels an existing booking and removes it from the schedule", async () => {
+    const pod = `cancel-me ${process.hrtime.bigint()}`;
+    await post(
+      "/api/bookings",
+      booking({ pod, roomId: "2", startsAt: "2031-08-01T09:00", endsAt: "2031-08-01T10:00" }),
+    );
+    const page = await (await fetch(baseUrl)).text();
+    const id = findCancelId(page, pod);
+
+    const res = await post(`/api/bookings/${id}`, new URLSearchParams());
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/?status=cancelled");
+
+    const after = await (await fetch(baseUrl)).text();
+    expect(after).not.toContain(pod);
+  });
+
+  it("404s when cancelling a booking id that doesn't exist", async () => {
+    const res = await post("/api/bookings/999999999", new URLSearchParams());
+    expect(res.status).toBe(404);
+  });
+
+  it("frees the room for a new booking after a cancel", async () => {
+    const first = `to-cancel ${process.hrtime.bigint()}`;
+    const second = `re-booked ${process.hrtime.bigint()}`;
+    await post(
+      "/api/bookings",
+      booking({
+        pod: first,
+        roomId: "2",
+        startsAt: "2031-08-02T09:00",
+        endsAt: "2031-08-02T10:00",
+      }),
+    );
+    const page = await (await fetch(baseUrl)).text();
+    const id = findCancelId(page, first);
+    await post(`/api/bookings/${id}`, new URLSearchParams());
+
+    const res = await post(
+      "/api/bookings",
+      booking({
+        pod: second,
+        roomId: "2",
+        startsAt: "2031-08-02T09:00",
+        endsAt: "2031-08-02T10:00",
+      }),
+    );
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/?status=booked");
   });
 });

@@ -189,3 +189,12 @@ export function createBooking(input: NewBooking): CreateBookingResult {
 
   return { ok: true, booking: { ...booking, roomName: room.name } };
 }
+
+// Anyone can cancel any booking — the same no-accounts trust model this app
+// already applies to creating one (a pod can already type any name it
+// likes; refusing to let it cancel a booking wouldn't add real protection,
+// just friction). Returns whether a row actually existed to remove, so the
+// route can tell a real cancellation from a stale/forged id.
+export function cancelBooking(id: number): boolean {
+  return db.delete(bookings).where(eq(bookings.id, id)).run().changes > 0;
+}

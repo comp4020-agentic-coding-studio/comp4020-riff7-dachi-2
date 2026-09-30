@@ -38,5 +38,5 @@ export const POST: APIRoute = async ({ request, redirect }) => {
   }
 
   bus.emit("booking", result.booking);
-  return redirect("/", 303);
+  return redirect("/?status=booked", 303);
 };

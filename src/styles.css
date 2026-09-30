@@ -1,41 +1,165 @@
+:root {
+  /* Spacing scale (roughly 4/8/12/16/24/32/48/64px) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* Type scale, ~1.25 ratio off a 1rem base */
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.563rem;
+  --text-2xl: 1.953rem;
+
+  --radius: 0.25rem;
+
+  /* ANU's own palette (confirmed against anu.edu.au's stylesheet): ANU Gold
+     #BE830E as the sole accent — used sparingly, never as a large fill, per
+     the university's own style guide — black/white as the primary tones,
+     and its grey scale for borders/tints. Text-muted stays the darker grey
+     already verified for contrast rather than ANU's own #7D7D7D, which
+     falls short of 4.5:1 on white (~4.1:1) at this text size. */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --text: #000000;
+  --text-muted: #595959;
+  --border: #c6c6c6;
+
+  --accent: #be830e;
+  --accent-hover: #96680b;
+  --accent-tint: #f5edde;
+  --accent-contrast: #000000;
+
+  --error: #a40e26;
+  --error-bg: #fdecee;
+  --error-border: #e3aab3;
+
+  --success: #0f5132;
+  --success-bg: #d1e7dd;
+  --success-border: #a3cfbb;
+
+  /* Fixed, decorative per-room accents (rooms 1-4 are seeded and stable —
+     see SEED_ROOMS in src/lib/db.ts). Supplementary to the room name text,
+     never the only signal a row belongs to a room. */
+  --room-1: #be830e;
+  --room-2: #2f6fed;
+  --room-3: #0d9488;
+  --room-4: #7d7d7d;
+}
+
+/* No dark-mode override: the homepage stays this plain white ANU-style
+   theme regardless of system color scheme, per an explicit ask for a white
+   background — a dark-mode palette would otherwise clash with a bg forced
+   to white. */
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  padding: 2rem;
-  font-family: system-ui, sans-serif;
+  padding: 0 0 var(--space-6);
+  font-family: "Public Sans", system-ui, sans-serif;
+  font-size: var(--text-base);
   line-height: 1.6;
-  color: #1a1a1a;
+  color: var(--text);
+  background: var(--bg);
 }
 
 main {
   max-width: 40rem;
   margin: 0 auto;
+  padding-inline: var(--space-4);
+}
+
+h1 {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  margin-block: 0 var(--space-3);
+}
+
+h2 {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-block: var(--space-6) var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 3px solid var(--accent);
+  display: inline-block;
 }
 
 nav {
   display: flex;
-  gap: 1rem;
-  max-width: 40rem;
-  margin: 0 auto 1.5rem;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-6);
+  background: #000;
+  border-bottom: 4px solid var(--accent);
+  font-size: var(--text-sm);
+}
+
+nav a {
+  color: #fff;
+  text-decoration: none;
+}
+
+nav a:hover {
+  color: var(--accent);
+}
+
+nav a:first-child {
+  margin-right: auto;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
 }
 
 a {
-  color: #0b5fff;
+  color: var(--accent);
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-5);
+  margin-block: var(--space-5);
 }
 
 form {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-3);
   align-items: end;
-  margin-block: 1.5rem;
+  margin: 0;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: var(--space-1);
   flex: 1 1 12rem;
   min-width: 0;
+}
+
+label {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
 }
 
 input,
@@ -43,44 +167,160 @@ select {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  padding: 0.4rem 0.6rem;
+  padding: var(--space-2) var(--space-3);
   font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 button {
-  padding: 0.4rem 1rem;
+  padding: var(--space-2) var(--space-4);
   font: inherit;
+  font-weight: 600;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+.error,
+.success {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius);
+  margin-block: var(--space-4);
 }
 
 .error {
-  padding: 0.6rem 0.8rem;
-  border: 1px solid #a40e26;
-  border-radius: 0.3rem;
-  color: #a40e26;
-  background: #fdecee;
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+
+.success {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.empty {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
 }
 
 .table-scroll {
   overflow-x: auto;
-  margin-block: 1rem;
+  margin-block: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  font-size: var(--text-sm);
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid #ddd;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--border) 25%, transparent);
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* A colored left edge per room — decorative and supplementary; the room
+   name column is always the real signal (see the "(past)" comment below for
+   the same rule applied to the past/upcoming state). */
+tr.room-1 td:first-child {
+  box-shadow: inset 3px 0 0 var(--room-1);
+}
+tr.room-2 td:first-child {
+  box-shadow: inset 3px 0 0 var(--room-2);
+}
+tr.room-3 td:first-child {
+  box-shadow: inset 3px 0 0 var(--room-3);
+}
+tr.room-4 td:first-child {
+  box-shadow: inset 3px 0 0 var(--room-4);
 }
 
 tr.past {
-  color: #595959;
+  color: var(--text-muted);
+}
+
+.hint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-block: var(--space-1) 0;
+}
+
+/* Reuses the already-verified error text/background pair from .error above
+   (6.90:1 light / 7.24:1 dark) rather than introducing a new color pairing
+   that would need its own contrast check — cancelling is destructive, so it
+   borrows that same visual language. */
+.btn-cancel {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--error);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+}
+
+.btn-cancel:hover {
+  background: var(--error-border);
+}
+
+.cancel-form {
+  margin: 0;
+}
+
+th:last-child,
+td:last-child {
+  width: 1%;
+  white-space: nowrap;
 }
 
 #live {
-  padding-inline-start: 1.2rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+#live li {
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
 }

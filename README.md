@@ -9,7 +9,7 @@ The core promise: a booking a pod makes is still there after a reload, and the a
 What I chose not to build, at least for this first pass:
 
 - **No accounts.** A pod types its own name into the form; nothing stops it typing someone else's. The real annoyance this app targets is "did anyone else book this room," not "who is allowed to book it" — solving the second means a login system this slice doesn't need yet.
-- **No editing or cancelling a booking.** Real room bookings do get cancelled; the schedule here is append-only. A pod that double-books itself has to live with it until this grows a cancel button.
+- **No editing a booking in place.** A pod can cancel one (same no-accounts trust model as booking — anyone can cancel any booking) and re-book, but there's no way to adjust just the time or tutor on an existing row without deleting and redoing it.
 - **No recurring bookings.** Every booking is a one-off time window. The course's own crit slots repeat weekly, but modelling recurrence correctly (what happens when one occurrence is cancelled, or a room changes) is a bigger problem than this slice takes on.
 - **The room list is fixed and seeded**, not something anyone can add to through the app. Which rooms exist isn't the annoying part of the real system; who's in one right now is.
 
