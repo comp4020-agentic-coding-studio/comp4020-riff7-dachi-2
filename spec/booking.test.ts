@@ -57,7 +57,7 @@ describe("bookings", () => {
       "/api/bookings",
       booking({ pod, roomId: "1", startsAt: "2031-02-02T09:00", endsAt: "2031-02-02T10:00" }),
     );
-    const res = await fetch(baseUrl);
+    const res = await fetch(new URL("/?date=2031-02-02", baseUrl));
     expect(await res.text()).toContain(pod);
   });
 
@@ -106,7 +106,7 @@ describe("bookings", () => {
     expect(redirectParams(secondRes).get("error")).toBe("conflict");
     expect(redirectParams(secondRes).get("roomId")).toBe("3");
 
-    const body = await (await fetch(baseUrl)).text();
+    const body = await (await fetch(new URL("/?date=2031-03-01", baseUrl))).text();
     expect(body).toContain(first);
     expect(body).not.toContain(second);
   });
@@ -135,7 +135,7 @@ describe("bookings", () => {
     expect(secondRes.status).toBe(303);
     expect(secondRes.headers.get("location")).toBe("/?status=booked");
 
-    const body = await (await fetch(baseUrl)).text();
+    const body = await (await fetch(new URL("/?date=2031-05-01", baseUrl))).text();
     expect(body).toContain(first);
     expect(body).toContain(second);
   });
@@ -286,14 +286,14 @@ describe("cancelling", () => {
       "/api/bookings",
       booking({ pod, roomId: "2", startsAt: "2031-08-01T09:00", endsAt: "2031-08-01T10:00" }),
     );
-    const page = await (await fetch(baseUrl)).text();
+    const page = await (await fetch(new URL("/?date=2031-08-01", baseUrl))).text();
     const id = findCancelId(page, pod);
 
     const res = await post(`/api/bookings/${id}`, new URLSearchParams());
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/?status=cancelled");
 
-    const after = await (await fetch(baseUrl)).text();
+    const after = await (await fetch(new URL("/?date=2031-08-01", baseUrl))).text();
     expect(after).not.toContain(pod);
   });
 
@@ -314,7 +314,7 @@ describe("cancelling", () => {
         endsAt: "2031-08-02T10:00",
       }),
     );
-    const page = await (await fetch(baseUrl)).text();
+    const page = await (await fetch(new URL("/?date=2031-08-02", baseUrl))).text();
     const id = findCancelId(page, first);
     await post(`/api/bookings/${id}`, new URLSearchParams());
 

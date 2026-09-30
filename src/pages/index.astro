@@ -1,9 +1,71 @@
 ---
-import { listBookings, listRooms, nowLocal } from "../lib/db";
+import { type BookingWithRoom, listBookings, listRooms, nowLocal } from "../lib/db";
 import "../styles.css";
 
 const rooms = listRooms();
 const bookings = listBookings();
+
+// Weekly-timetable grid: rooms as columns, half-hour slots as rows, one day
+// at a time — replaces the flat scrolling list with the actual timetable
+// shape a room booking is, so a gap or a clash reads at a glance instead of
+// requiring a scan down a table. Pure a re-render of data already fetched
+// above; no schema or query change.
+const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+const today = nowLocal().slice(0, 10);
+const requestedDate = Astro.url.searchParams.get("date");
+const selectedDate = requestedDate && DATE_SHAPE.test(requestedDate) ? requestedDate : today;
+
+// Calendar-day arithmetic only (never a booking's own time) — safe to go
+// through Date/UTC here because we only ever read back the Y/M/D parts, the
+// same reasoning src/lib/db.ts's own comments give for why time-of-day
+// arithmetic in this app never does that.
+function addDays(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
+}
+const prevDate = addDays(selectedDate, -1);
+const nextDate = addDays(selectedDate, 1);
+
+const dayBookings = bookings.filter((b) => b.startsAt.slice(0, 10) === selectedDate);
+
+const SLOT_MINUTES = 30;
+const DAY_START_MIN = 8 * 60;
+const DAY_END_MIN = 20 * 60;
+const floorToSlot = (min: number) => Math.floor(min / SLOT_MINUTES) * SLOT_MINUTES;
+const ceilToSlot = (min: number) => Math.ceil(min / SLOT_MINUTES) * SLOT_MINUTES;
+const timeToMinutes = (t: string) => {
+  const [h, m] = t.slice(11, 16).split(":").map(Number);
+  return h * 60 + m;
+};
+const formatMinutes = (min: number) =>
+  `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+
+// The grid always covers 08:00-20:00, but stretches to fit any booking that
+// falls outside it (a booking's own time is never clamped or hidden just
+// because it's early or late).
+let rangeStart = DAY_START_MIN;
+let rangeEnd = DAY_END_MIN;
+for (const b of dayBookings) {
+  rangeStart = Math.min(rangeStart, floorToSlot(timeToMinutes(b.startsAt)));
+  rangeEnd = Math.max(rangeEnd, ceilToSlot(timeToMinutes(b.endsAt)));
+}
+const slotCount = (rangeEnd - rangeStart) / SLOT_MINUTES;
+const slots = Array.from({ length: slotCount }, (_, i) => rangeStart + i * SLOT_MINUTES);
+
+type Cell = { kind: "start"; booking: BookingWithRoom; span: number } | { kind: "continued" } | null;
+const occupancy: Record<number, Cell[]> = {};
+for (const room of rooms) occupancy[room.id] = Array.from({ length: slotCount }, () => null);
+
+for (const b of dayBookings) {
+  const startIdx = Math.max(0, (floorToSlot(timeToMinutes(b.startsAt)) - rangeStart) / SLOT_MINUTES);
+  const endIdx = Math.min(slotCount, (ceilToSlot(timeToMinutes(b.endsAt)) - rangeStart) / SLOT_MINUTES);
+  const span = endIdx - startIdx;
+  if (span <= 0) continue;
+  occupancy[b.roomId][startIdx] = { kind: "start", booking: b, span };
+  for (let i = startIdx + 1; i < endIdx; i++) occupancy[b.roomId][i] = { kind: "continued" };
+}
 
 const ERROR_TEXT: Record<string, string> = {
   missing: "Every field is required.",
@@ -118,70 +180,104 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
             id="startsAt"
             name="startsAt"
             type="datetime-local"
+            step="1800"
             required
             value={resubmitStartsAt}
           />
         </div>
         <div class="field">
           <label for="endsAt">Ends</label>
-          <input id="endsAt" name="endsAt" type="datetime-local" required value={resubmitEndsAt} />
+          <input
+            id="endsAt"
+            name="endsAt"
+            type="datetime-local"
+            step="1800"
+            required
+            value={resubmitEndsAt}
+          />
         </div>
         <button>Book the room</button>
       </form>
       </div>
 
       <h2>Schedule</h2>
-      {
-        bookings.length === 0 ? (
-          <p class="empty">No bookings yet.</p>
-        ) : (
-          <div class="table-scroll" tabindex="0" role="region" aria-label="Schedule">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Room</th>
-                  <th scope="col">Pod</th>
-                  <th scope="col">Tutor</th>
-                  <th scope="col">Starts</th>
-                  <th scope="col">Ends</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="schedule">
-                {/* tr.past dims a finished booking, but colour alone can't be the
-                    only way to tell — WCAG 1.4.1, and axe-core has no rule that
-                    catches it since it can't judge what a colour means. The text
-                    suffix below is the real signal; the dimming is just a bonus
-                    for a sighted skim. */}
-                {bookings.map((booking) => {
-                  const isPast = booking.endsAt < nowLocal();
-                  return (
-                    <tr class={[`room-${booking.roomId}`, isPast && "past"].filter(Boolean).join(" ")}>
-                      <td>{booking.roomName}</td>
-                      <td>{booking.pod}</td>
-                      <td>{booking.tutor ?? "—"}</td>
-                      <td>{booking.startsAt.replace("T", " ")}</td>
-                      <td>
-                        {booking.endsAt.replace("T", " ")}
-                        {isPast && " (past)"}
+      <nav class="day-nav" aria-label="Day">
+        <a href={`/?date=${prevDate}`}>&larr; {prevDate}</a>
+        <strong>{selectedDate}</strong>
+        <a href={`/?date=${today}`}>Today</a>
+        <a href={`/?date=${nextDate}`}>{nextDate} &rarr;</a>
+      </nav>
+      {dayBookings.length === 0 && <p class="hint">No bookings for this day.</p>}
+
+      {/* Drag-and-drop is a pointer-only convenience on top of the form
+          above, which stays fully keyboard- and screen-reader-operable on
+          its own — dropping one of these just prefills the same fields a
+          person would otherwise type, then still requires typing a pod name
+          and pressing the real submit button, so nothing here bypasses the
+          server's own revalidation. */}
+      <div class="preset-blocks">
+        <p class="hint">Drag a duration onto an open slot to prefill the form:</p>
+        <div class="preset-chip-row">
+          {
+            [30, 60, 90, 120].map((min) => (
+              <div class="preset-chip" draggable="true" data-duration-min={min}>
+                {min < 60 ? `${min} min` : `${min / 60}h${min % 60 ? " 30" : ""}`}
+              </div>
+            ))
+          }
+        </div>
+      </div>
+
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Schedule">
+        <table class="week-grid" data-date={selectedDate}>
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              {rooms.map((room) => <th scope="col">{room.name}</th>)}
+            </tr>
+          </thead>
+          <tbody id="schedule">
+            {/* .past dims a finished booking, but colour alone can't be the
+                only way to tell — WCAG 1.4.1, and axe-core has no rule that
+                catches it since it can't judge what a colour means. The text
+                suffix below is the real signal; the dimming is just a bonus
+                for a sighted skim. */}
+            {slots.map((slotStart, slotIdx) => (
+              <tr>
+                <th scope="row">{formatMinutes(slotStart)}</th>
+                {rooms.map((room) => {
+                  const cell = occupancy[room.id][slotIdx];
+                  if (cell?.kind === "continued") return null;
+                  if (cell?.kind === "start") {
+                    const booking = cell.booking;
+                    const isPast = booking.endsAt < nowLocal();
+                    return (
+                      <td rowspan={cell.span} class={[`room-${room.id}`, isPast && "past"].filter(Boolean).join(" ")}>
+                        <div class="booking-block">
+                          <strong>{booking.pod}</strong>
+                          {booking.tutor && <span class="hint">{booking.tutor}</span>}
+                          <span class="hint">
+                            {booking.startsAt.slice(11, 16)}–{booking.endsAt.slice(11, 16)}
+                            {isPast && " (past)"}
+                          </span>
+                          {!isPast && (
+                            <form method="post" action={`/api/bookings/${booking.id}`} class="cancel-form">
+                              <button type="submit" class="btn-cancel">
+                                Cancel
+                              </button>
+                            </form>
+                          )}
+                        </div>
                       </td>
-                      <td>
-                        {!isPast && (
-                          <form method="post" action={`/api/bookings/${booking.id}`} class="cancel-form">
-                            <button type="submit" class="btn-cancel">
-                              Cancel
-                            </button>
-                          </form>
-                        )}
-                      </td>
-                    </tr>
-                  );
+                    );
+                  }
+                  return <td class="dropzone" data-room-id={room.id} data-slot-start={slotStart} />;
                 })}
-              </tbody>
-            </table>
-          </div>
-        )
-      }
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <script
         is:inline
         type="application/json"
@@ -263,6 +359,52 @@ const resubmitEndsAt = Astro.url.searchParams.get("endsAt") ?? "";
       document.querySelectorAll(".cancel-form").forEach((form) => {
         form.addEventListener("submit", (event) => {
           if (!confirm("Cancel this booking?")) event.preventDefault();
+        });
+      });
+
+      // Drag a preset duration onto an open schedule slot to prefill the
+      // form's room/starts/ends fields — native HTML5 drag-and-drop, so it's
+      // mouse/trackpad only (no touch polyfill here); the form itself is the
+      // real submission path and stays fully usable without ever dragging
+      // anything.
+      const scheduleTable = document.querySelector(".week-grid");
+      const selectedDateAttr = scheduleTable?.getAttribute("data-date") ?? "";
+      const startsInput = /** @type {HTMLInputElement | null} */ (document.querySelector("#startsAt"));
+      const endsInput = /** @type {HTMLInputElement | null} */ (document.querySelector("#endsAt"));
+
+      function minutesToHHMM(min) {
+        const h = String(Math.floor(min / 60)).padStart(2, "0");
+        const m = String(min % 60).padStart(2, "0");
+        return `${h}:${m}`;
+      }
+
+      document.querySelectorAll(".preset-chip").forEach((chip) => {
+        chip.addEventListener("dragstart", (event) => {
+          event.dataTransfer?.setData("text/plain", chip.getAttribute("data-duration-min") ?? "30");
+        });
+      });
+
+      document.querySelectorAll("td.dropzone").forEach((cell) => {
+        cell.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          cell.classList.add("drop-target");
+        });
+        cell.addEventListener("dragleave", () => cell.classList.remove("drop-target"));
+        cell.addEventListener("drop", (event) => {
+          event.preventDefault();
+          cell.classList.remove("drop-target");
+          if (!selectedDateAttr || !roomSelect || !startsInput || !endsInput) return;
+
+          const durationMin = Number(event.dataTransfer?.getData("text/plain") ?? "30");
+          const roomId = cell.getAttribute("data-room-id");
+          const slotStart = Number(cell.getAttribute("data-slot-start"));
+          if (!roomId || !Number.isFinite(slotStart) || !Number.isFinite(durationMin)) return;
+
+          roomSelect.value = roomId;
+          startsInput.value = `${selectedDateAttr}T${minutesToHHMM(slotStart)}`;
+          endsInput.value = `${selectedDateAttr}T${minutesToHHMM(slotStart + durationMin)}`;
+          renderAvailability();
+          document.querySelector("#pod")?.focus();
         });
       });
     </script>

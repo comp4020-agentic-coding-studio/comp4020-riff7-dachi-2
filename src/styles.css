@@ -210,14 +210,6 @@ button:hover {
   border-color: var(--success-border);
 }
 
-.empty {
-  padding: var(--space-5);
-  text-align: center;
-  color: var(--text-muted);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-}
-
 .table-scroll {
   overflow-x: auto;
   margin-block: var(--space-4);
@@ -256,23 +248,85 @@ tbody tr:last-child td {
 }
 
 /* A colored left edge per room — decorative and supplementary; the room
-   name column is always the real signal (see the "(past)" comment below for
-   the same rule applied to the past/upcoming state). */
-tr.room-1 td:first-child {
+   name column header is always the real signal (see the "(past)" comment
+   below for the same rule applied to the past/upcoming state). */
+td.room-1 {
   box-shadow: inset 3px 0 0 var(--room-1);
 }
-tr.room-2 td:first-child {
+td.room-2 {
   box-shadow: inset 3px 0 0 var(--room-2);
 }
-tr.room-3 td:first-child {
+td.room-3 {
   box-shadow: inset 3px 0 0 var(--room-3);
 }
-tr.room-4 td:first-child {
+td.room-4 {
   box-shadow: inset 3px 0 0 var(--room-4);
 }
 
-tr.past {
+td.past {
   color: var(--text-muted);
+  background: color-mix(in srgb, var(--border) 20%, transparent);
+}
+
+.preset-blocks {
+  margin-block: var(--space-4);
+}
+
+.preset-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.preset-chip {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent-contrast);
+  background: var(--accent-tint);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  cursor: grab;
+  user-select: none;
+}
+
+.preset-chip:active {
+  cursor: grabbing;
+}
+
+td.dropzone.drop-target {
+  background: var(--accent-tint);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.day-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-block: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.week-grid {
+  table-layout: fixed;
+}
+
+.week-grid th:first-child,
+.week-grid td:first-child {
+  width: 4.5rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.week-grid td {
+  vertical-align: top;
+}
+
+.booking-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 .hint {
@@ -300,12 +354,6 @@ tr.past {
 
 .cancel-form {
   margin: 0;
-}
-
-th:last-child,
-td:last-child {
-  width: 1%;
-  white-space: nowrap;
 }
 
 #live {
